@@ -1,9 +1,12 @@
-﻿{
+{
   "name": "mail-assistant",
   "private": true,
   "version": "0.1.0",
   "description": "A runnable V1 prototype for a Gmail side-panel mail prioritization assistant.",
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -31,4 +34,3 @@
     "vite": "^8.0.4"
   }
 }
-

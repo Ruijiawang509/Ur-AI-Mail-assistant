@@ -1,7 +1,7 @@
-export type TabKey = 'today_focus' | 'todo' | 'due_soon' | 'ignorable'
-export type Priority = 'high' | 'medium' | 'low'
+export type BoardType = 'priority_content' | 'within_48h' | 'todo' | 'ignore'
+export type PriorityLevel = 'high' | 'medium' | 'low' | 'ignore'
+export type FeedbackAction = 'more_important' | 'show_less'
 export type ItemStatus = 'pending' | 'done'
-export type OpenSource = 'panel' | 'workspace'
 
 export type PanelMeta = {
   assistantName: string
@@ -10,10 +10,10 @@ export type PanelMeta = {
 }
 
 export type OverviewCounts = {
-  highPriorityCount: number
+  priorityContentCount: number
+  within48hCount: number
   todoCount: number
-  dueSoon48hCount: number
-  ignorableCount: number
+  ignoreCount: number
 }
 
 export type MailListItem = {
@@ -27,36 +27,22 @@ export type MailListItem = {
   actionLabel?: string
   deadlineText?: string
   deadlineTs?: string | null
-  priority: Priority
+  boardType: BoardType
+  boardReasonText: string
+  priorityLevel: PriorityLevel
+  priorityScore: number
   reasonTags: string[]
   itemStatus: ItemStatus
+  receivedAt: string
   aggregationKey?: string
   aggregationLabel?: string
 }
 
-export type TodayFocusContent = {
-  mustHandleItems: MailListItem[]
-  worthAttentionItems: MailListItem[]
-}
-
-export type TodoSection = {
-  sectionKey: string
-  sectionTitle: string
-  items: MailListItem[]
-}
-
-export type TodoContent = {
-  sections: TodoSection[]
-}
-
-export type DueSoonContent = {
-  todayItems: MailListItem[]
-  next48hItems: MailListItem[]
-  thisWeekItems: MailListItem[]
-}
-
-export type IgnorableContent = {
-  ignorableItems: MailListItem[]
+export type ExpandedPanelData = {
+  meta: PanelMeta
+  overview: OverviewCounts
+  activeBoard: BoardType
+  boards: Record<BoardType, MailListItem[]>
 }
 
 export type MailInsightDetail = {
@@ -66,21 +52,14 @@ export type MailInsightDetail = {
   senderEmail?: string
   subject: string
   category?: string
-  priority: Priority
+  boardType: BoardType
+  boardReasonText: string
+  priorityLevel: PriorityLevel
+  priorityScore: number
   focusText: string
   suggestedAction?: string
   deadlineDisplay?: string
   reasonBullets: string[]
-}
-
-export type ExpandedPanelData = {
-  meta: PanelMeta
-  overview: OverviewCounts
-  activeTab: TabKey
-  todayFocus: TodayFocusContent
-  todo: TodoContent
-  dueSoon: DueSoonContent
-  ignorable: IgnorableContent
 }
 
 export type MailRecord = MailListItem & {
@@ -90,16 +69,8 @@ export type MailRecord = MailListItem & {
   suggestedAction?: string
   deadlineDisplay?: string
   reasonBullets: string[]
-  receivedAt: string
   previewLines: string[]
   bodyParagraphs: string[]
-}
-
-export type PanelFilters = {
-  senderNames: string[]
-  customSenderQuery?: string
-  focusTopics: string[]
-  customFocusQuery?: string
 }
 
 export type SenderOption = {
@@ -113,15 +84,18 @@ export type HistoryEntry = {
   count: number
 }
 
-export const TAB_LABELS: Record<TabKey, string> = {
-  today_focus: '高优先级',
+export type FeedbackMap = Record<string, FeedbackAction>
+
+export const BOARD_LABELS: Record<BoardType, string> = {
+  priority_content: '优先内容',
+  within_48h: '48h',
   todo: '待处理',
-  due_soon: '48h 到期',
-  ignorable: '可忽略',
+  ignore: '可忽略',
 }
 
-export const PRIORITY_LABELS: Record<Priority, string> = {
-  high: '高优',
-  medium: '中优',
-  low: '低优',
+export const PRIORITY_LABELS: Record<PriorityLevel, string> = {
+  high: '高优先级',
+  medium: '中优先级',
+  low: '低优先级',
+  ignore: '可忽略级',
 }

@@ -1,57 +1,55 @@
 import { useState } from 'react'
-import type { MailListItem, Priority } from '../types'
+import { BOARD_LABELS, PRIORITY_LABELS } from '../types'
+import type { FeedbackAction, MailListItem } from '../types'
 
 type MailBundleCardProps = {
   items: MailListItem[]
   label: string
+  feedbackAction?: FeedbackAction
   onOpenMail: (messageId: string) => void
-  onMuteSimilar?: (messageId: string) => void
-}
-
-const priorityIconMap: Record<Priority, string> = {
-  high: '✦',
-  medium: '•',
-  low: '○',
+  onFeedbackImportant?: (messageId: string) => void
+  onFeedbackLess?: (messageId: string) => void
 }
 
 export function MailBundleCard({
   items,
   label,
+  feedbackAction,
   onOpenMail,
-  onMuteSimilar,
+  onFeedbackImportant,
+  onFeedbackLess,
 }: MailBundleCardProps) {
   const [expanded, setExpanded] = useState(false)
   const leadItem = items[0]
-  const previewItems = items.slice(0, 3)
+  const previewItems = expanded ? items : items.slice(0, 3)
 
   return (
     <article className="mail-card mail-bundle-card">
       <div className="mail-card-header">
         <div className="mail-card-title-group">
-          <span className={`priority-dot ${leadItem.priority}`} aria-hidden="true">
-            {priorityIconMap[leadItem.priority]}
+          <span className={`priority-score priority-${leadItem.priorityLevel}`}>
+            {Math.round(leadItem.priorityScore * 100)}
           </span>
           <div className="mail-card-title-copy">
-            <strong>{leadItem.senderName}</strong>
+            <div className="mail-source-row">
+              <strong>{leadItem.senderName}</strong>
+              <span>{leadItem.receivedAt}</span>
+            </div>
             <h4>{items.length} 封{label}已合并</h4>
           </div>
         </div>
-
-        <span className="section-count">{items.length}</span>
       </div>
 
-      <p className="mail-card-summary">
-        同一发件人的相似邮件已合并展示，需要查看时再展开并选择具体邮件。
-      </p>
+      <p className="mail-card-summary">同一来源的相似邮件被收拢展示，需要时仍可逐封查看。</p>
 
-      <div className="mail-card-strip">
-        <span className="tag-chip">
-          <span aria-hidden="true">+</span>
-          <span>{label}</span>
+      <div className="mail-dimensions">
+        <span className="dimension-pill board-pill">
+          <small>板块</small>
+          {BOARD_LABELS[leadItem.boardType]}
         </span>
-        <span className="deadline-chip">
-          <span aria-hidden="true">↗</span>
-          <span>按需展开</span>
+        <span className={`dimension-pill priority-pill priority-${leadItem.priorityLevel}`}>
+          <small>优先级</small>
+          {PRIORITY_LABELS[leadItem.priorityLevel]}
         </span>
       </div>
 
@@ -59,42 +57,41 @@ export function MailBundleCard({
         {previewItems.map((item) => (
           <div className="bundle-preview-row" key={item.messageId}>
             <span className="bundle-preview-subject">{item.subject}</span>
-            <span className="bundle-preview-time">{item.deadlineText ?? '最近'}</span>
+            <button className="text-button" type="button" onClick={() => onOpenMail(item.messageId)}>
+              查看
+            </button>
           </div>
         ))}
-        {items.length > previewItems.length ? (
-          <div className="bundle-preview-row muted">
-            <span className="bundle-preview-subject">还有 {items.length - previewItems.length} 封相似邮件</span>
-          </div>
+        {!expanded && items.length > previewItems.length ? (
+          <span className="bundle-more">还有 {items.length - previewItems.length} 封相似邮件</span>
         ) : null}
       </div>
 
-      {expanded ? (
-        <div className="bundle-list">
-          {items.map((item) => (
-            <div className="bundle-item" key={item.messageId}>
-              <div className="bundle-item-copy">
-                <strong>{item.subject}</strong>
-                <span>{item.deadlineText ?? item.shortSummary}</span>
-              </div>
-              <button className="ghost-button small" type="button" onClick={() => onOpenMail(item.messageId)}>
-                打开
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
       <div className="card-actions">
-        <button className="primary-button" type="button" onClick={() => setExpanded((value) => !value)}>
-          {expanded ? '收起列表' : `查看 ${items.length} 封`}
+        <button className="secondary-button" type="button" onClick={() => setExpanded((value) => !value)}>
+          {expanded ? '收起列表' : `展开 ${items.length} 封`}
         </button>
-
-        {onMuteSimilar ? (
-          <button className="ghost-button small" type="button" onClick={() => onMuteSimilar(leadItem.messageId)}>
-            少提醒
-          </button>
-        ) : null}
+        <div className="feedback-actions" aria-label="调整此类邮件的个性化优先级">
+          <span>反馈</span>
+          {onFeedbackImportant ? (
+            <button
+              className={`feedback-button ${feedbackAction === 'more_important' ? 'is-active' : ''}`}
+              type="button"
+              onClick={() => onFeedbackImportant(leadItem.messageId)}
+            >
+              更重要
+            </button>
+          ) : null}
+          {onFeedbackLess ? (
+            <button
+              className={`feedback-button ${feedbackAction === 'show_less' ? 'is-active' : ''}`}
+              type="button"
+              onClick={() => onFeedbackLess(leadItem.messageId)}
+            >
+              少显示
+            </button>
+          ) : null}
+        </div>
       </div>
     </article>
   )

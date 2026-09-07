@@ -1,16 +1,23 @@
 import type {
+  BoardType,
   ExpandedPanelData,
+  FeedbackMap,
   HistoryEntry,
   ItemStatus,
   MailInsightDetail,
   MailListItem,
   MailRecord,
-  PanelFilters,
+  PriorityLevel,
   SenderOption,
-  TabKey,
 } from '../types'
 
 type StatusMap = Record<string, ItemStatus>
+type MailRecordSeed = Omit<
+  MailRecord,
+  'boardType' | 'boardReasonText' | 'priorityLevel' | 'priorityScore'
+> & {
+  priority: Exclude<PriorityLevel, 'ignore'>
+}
 
 const panelMeta = {
   assistantName: '邮件重点助手',
@@ -20,7 +27,7 @@ const panelMeta = {
 
 const fallbackFrequentSenders = ['Amazon Recruiter', 'Columbia Career Center']
 
-const mailRecords: Record<string, MailRecord> = {
+const mailRecords: Record<string, MailRecordSeed> = {
   'q3-review': {
     messageId: 'q3-review',
     threadId: 'thread-project-03',
@@ -398,50 +405,6 @@ const mailRecords: Record<string, MailRecord> = {
   },
 }
 
-const todayFocusIds = {
-  mustHandleItems: ['q3-review', 'amazon-interview', 'career-fair'],
-  worthAttentionItems: ['visa-check', 'finance-report'],
-}
-
-const todoSectionBlueprint = [
-  {
-    sectionKey: 'reply',
-    sectionTitle: '需要回复',
-    itemIds: ['amazon-interview'],
-  },
-  {
-    sectionKey: 'register',
-    sectionTitle: '需要报名 / 投票',
-    itemIds: ['career-fair', 'team-offsite'],
-  },
-  {
-    sectionKey: 'submit',
-    sectionTitle: '需要提交 / 填表',
-    itemIds: ['q3-review', 'workspace-booking'],
-  },
-  {
-    sectionKey: 'confirm',
-    sectionTitle: '需要确认 / 审批',
-    itemIds: ['visa-check', 'expense-approval'],
-  },
-]
-
-const dueSoonIds = {
-  todayItems: ['q3-review'],
-  next48hItems: ['amazon-interview', 'career-fair'],
-  thisWeekItems: ['visa-check', 'expense-approval', 'team-offsite'],
-}
-
-const ignorableIds = [
-  'linkedin-product',
-  'linkedin-data',
-  'linkedin-growth',
-  'linkedin-remote',
-  'notion-newsletter',
-  'aws-webinar',
-  'campus-weekly',
-]
-
 const inboxOrder = [
   'q3-review',
   'amazon-interview',
@@ -460,54 +423,87 @@ const inboxOrder = [
   'campus-weekly',
 ]
 
-const withStatus = (record: MailRecord, statusMap: StatusMap): MailRecord => ({
-  ...record,
-  itemStatus: statusMap[record.messageId] ?? record.itemStatus,
-})
-
-const includesText = (value: string | undefined, query: string) =>
-  (value ?? '').toLowerCase().includes(query.trim().toLowerCase())
-
-const matchesSenderTerm = (record: MailRecord, term: string) => {
-  const normalizedTerm = term.trim().toLowerCase()
-
-  if (!normalizedTerm) {
-    return false
-  }
-
-  return (
-    record.senderName.toLowerCase() === normalizedTerm ||
-    record.senderEmail?.toLowerCase() === normalizedTerm ||
-    record.senderName.toLowerCase().includes(normalizedTerm) ||
-    record.senderEmail?.toLowerCase().includes(normalizedTerm)
-  )
+const boardByMessageId: Record<string, BoardType> = {
+  'q3-review': 'within_48h',
+  'amazon-interview': 'within_48h',
+  'career-fair': 'within_48h',
+  'finance-report': 'priority_content',
+  'visa-check': 'todo',
+  'expense-approval': 'todo',
+  'team-offsite': 'todo',
+  'workspace-booking': 'todo',
+  'linkedin-product': 'ignore',
+  'linkedin-data': 'ignore',
+  'linkedin-growth': 'ignore',
+  'linkedin-remote': 'ignore',
+  'notion-newsletter': 'ignore',
+  'aws-webinar': 'ignore',
+  'campus-weekly': 'ignore',
 }
 
-const matchesFilters = (record: MailRecord, filters?: PanelFilters) => {
-  if (!filters) {
-    return true
+const boardReasonByMessageId: Record<string, string> = {
+  'q3-review': '今天有明确提交截止时间',
+  'amazon-interview': '48 小时内需要回复确认',
+  'career-fair': '报名窗口将在 48 小时内关闭',
+  'finance-report': '近期决策需要先掌握的关键信息',
+  'visa-check': '存在明确的后续核验动作',
+  'expense-approval': '需要完成审批后才能继续流程',
+  'team-offsite': '存在一个低成本待办动作',
+  'workspace-booking': '需要填写并提交登记表',
+  'linkedin-product': '批量岗位订阅，可集中查看',
+  'linkedin-data': '批量岗位订阅，可集中查看',
+  'linkedin-growth': '批量岗位订阅，可集中查看',
+  'linkedin-remote': '批量岗位订阅，可集中查看',
+  'notion-newsletter': '产品资讯，无明确动作要求',
+  'aws-webinar': '泛活动邀请，与当前任务关联较弱',
+  'campus-weekly': '资讯聚合，无明确截止时间',
+}
+
+const priorityScoreByMessageId: Record<string, number> = {
+  'q3-review': 0.94,
+  'amazon-interview': 0.91,
+  'career-fair': 0.82,
+  'finance-report': 0.63,
+  'visa-check': 0.88,
+  'expense-approval': 0.67,
+  'team-offsite': 0.54,
+  'workspace-booking': 0.48,
+  'linkedin-product': 0.18,
+  'linkedin-data': 0.17,
+  'linkedin-growth': 0.16,
+  'linkedin-remote': 0.15,
+  'notion-newsletter': 0.31,
+  'aws-webinar': 0.2,
+  'campus-weekly': 0.29,
+}
+
+const getPriorityLevel = (score: number): PriorityLevel => {
+  if (score >= 0.76) return 'high'
+  if (score >= 0.45) return 'medium'
+  if (score >= 0.22) return 'low'
+  return 'ignore'
+}
+
+const withStatus = (
+  record: MailRecordSeed,
+  statusMap: StatusMap,
+  feedbackMap: FeedbackMap = {},
+): MailRecord => {
+  const feedback = feedbackMap[record.messageId]
+  const adjustment = feedback === 'more_important' ? 0.12 : feedback === 'show_less' ? -0.12 : 0
+  const priorityScore = Math.max(
+    0.01,
+    Math.min(0.99, (priorityScoreByMessageId[record.messageId] ?? 0.5) + adjustment),
+  )
+
+  return {
+    ...record,
+    boardType: boardByMessageId[record.messageId] ?? 'priority_content',
+    boardReasonText: boardReasonByMessageId[record.messageId] ?? '根据邮件内容进入当前板块',
+    priorityLevel: getPriorityLevel(priorityScore),
+    priorityScore,
+    itemStatus: statusMap[record.messageId] ?? record.itemStatus,
   }
-
-  const hasSenderFilter =
-    filters.senderNames.length > 0 || Boolean(filters.customSenderQuery?.trim())
-  const hasFocusFilter =
-    filters.focusTopics.length > 0 || Boolean(filters.customFocusQuery?.trim())
-
-  const senderMatched =
-    !hasSenderFilter ||
-    filters.senderNames.some((term) => matchesSenderTerm(record, term)) ||
-    includesText(record.senderName, filters.customSenderQuery ?? '') ||
-    includesText(record.senderEmail, filters.customSenderQuery ?? '')
-
-  const focusMatched =
-    !hasFocusFilter ||
-    filters.focusTopics.some((topic) => record.focusAreas.includes(topic)) ||
-    includesText(record.category, filters.customFocusQuery ?? '') ||
-    includesText(record.subject, filters.customFocusQuery ?? '') ||
-    includesText(record.shortSummary, filters.customFocusQuery ?? '') ||
-    record.focusAreas.some((topic) => includesText(topic, filters.customFocusQuery ?? ''))
-
-  return senderMatched && focusMatched
 }
 
 const asMailListItem = (record: MailRecord): MailListItem => ({
@@ -521,33 +517,16 @@ const asMailListItem = (record: MailRecord): MailListItem => ({
   actionLabel: record.actionLabel,
   deadlineText: record.deadlineText,
   deadlineTs: record.deadlineTs,
-  priority: record.priority,
+  boardType: record.boardType,
+  boardReasonText: record.boardReasonText,
+  priorityLevel: record.priorityLevel,
+  priorityScore: record.priorityScore,
   reasonTags: record.reasonTags,
   itemStatus: record.itemStatus,
+  receivedAt: record.receivedAt,
   aggregationKey: record.aggregationKey,
   aggregationLabel: record.aggregationLabel,
 })
-
-const mapFilteredItems = (ids: string[], statusMap: StatusMap, filters?: PanelFilters) =>
-  ids
-    .map((id) => withStatus(mailRecords[id], statusMap))
-    .filter((record) => matchesFilters(record, filters))
-    .map(asMailListItem)
-
-const uniqueCount = (
-  ids: string[],
-  statusMap: StatusMap,
-  filters?: PanelFilters,
-  predicate: (record: MailRecord) => boolean = () => true,
-) =>
-  Array.from(new Set(ids)).filter((id) => {
-    const record = withStatus(mailRecords[id], statusMap)
-    return (
-      record.itemStatus === 'pending' &&
-      matchesFilters(record, filters) &&
-      predicate(record)
-    )
-  }).length
 
 export const initialStatusMap = Object.keys(mailRecords).reduce(
   (collection, messageId) => {
@@ -559,58 +538,43 @@ export const initialStatusMap = Object.keys(mailRecords).reduce(
 
 export const buildPanelData = (
   statusMap: StatusMap,
-  activeTab: TabKey,
-  filters?: PanelFilters,
-): ExpandedPanelData => ({
-  meta: panelMeta,
-  overview: {
-    highPriorityCount: Object.values(mailRecords).filter((record) => {
-      const current = withStatus(record, statusMap)
-      return (
-        current.priority === 'high' &&
-        current.itemStatus === 'pending' &&
-        matchesFilters(current, filters)
-      )
-    }).length,
-    todoCount: uniqueCount(
-      Object.values(mailRecords)
-        .filter((record) => record.actionRequired)
-        .map((record) => record.messageId),
-      statusMap,
-      filters,
-    ),
-    dueSoon48hCount: uniqueCount(
-      [...dueSoonIds.todayItems, ...dueSoonIds.next48hItems],
-      statusMap,
-      filters,
-    ),
-    ignorableCount: uniqueCount(ignorableIds, statusMap, filters),
-  },
-  activeTab,
-  todayFocus: {
-    mustHandleItems: mapFilteredItems(todayFocusIds.mustHandleItems, statusMap, filters),
-    worthAttentionItems: mapFilteredItems(todayFocusIds.worthAttentionItems, statusMap, filters),
-  },
-  todo: {
-    sections: todoSectionBlueprint.map((section) => ({
-      sectionKey: section.sectionKey,
-      sectionTitle: section.sectionTitle,
-      items: mapFilteredItems(section.itemIds, statusMap, filters),
-    })),
-  },
-  dueSoon: {
-    todayItems: mapFilteredItems(dueSoonIds.todayItems, statusMap, filters),
-    next48hItems: mapFilteredItems(dueSoonIds.next48hItems, statusMap, filters),
-    thisWeekItems: mapFilteredItems(dueSoonIds.thisWeekItems, statusMap, filters),
-  },
-  ignorable: {
-    ignorableItems: mapFilteredItems(ignorableIds, statusMap, filters),
-  },
-})
+  activeBoard: BoardType,
+  feedbackMap: FeedbackMap = {},
+): ExpandedPanelData => {
+  const visibleItems = inboxOrder
+    .map((messageId) => withStatus(mailRecords[messageId], statusMap, feedbackMap))
+    .filter((record) => record.itemStatus === 'pending')
+    .map(asMailListItem)
+    .sort((left, right) => right.priorityScore - left.priorityScore)
+
+  const boards: Record<BoardType, MailListItem[]> = {
+    priority_content: [],
+    within_48h: [],
+    todo: [],
+    ignore: [],
+  }
+
+  for (const item of visibleItems) {
+    boards[item.boardType].push(item)
+  }
+
+  return {
+    meta: panelMeta,
+    overview: {
+      priorityContentCount: boards.priority_content.length,
+      within48hCount: boards.within_48h.length,
+      todoCount: boards.todo.length,
+      ignoreCount: boards.ignore.length,
+    },
+    activeBoard,
+    boards,
+  }
+}
 
 export const getMailRecord = (
   messageId: string,
   statusMap: StatusMap,
+  feedbackMap: FeedbackMap = {},
 ): MailRecord | undefined => {
   const record = mailRecords[messageId]
 
@@ -618,14 +582,15 @@ export const getMailRecord = (
     return undefined
   }
 
-  return withStatus(record, statusMap)
+  return withStatus(record, statusMap, feedbackMap)
 }
 
 export const getMailDetail = (
   messageId: string,
   statusMap: StatusMap,
+  feedbackMap: FeedbackMap = {},
 ): MailInsightDetail | undefined => {
-  const record = getMailRecord(messageId, statusMap)
+  const record = getMailRecord(messageId, statusMap, feedbackMap)
 
   if (!record) {
     return undefined
@@ -638,7 +603,10 @@ export const getMailDetail = (
     senderEmail: record.senderEmail,
     subject: record.subject,
     category: record.category,
-    priority: record.priority,
+    boardType: record.boardType,
+    boardReasonText: record.boardReasonText,
+    priorityLevel: record.priorityLevel,
+    priorityScore: record.priorityScore,
     focusText: record.focusText,
     suggestedAction: record.suggestedAction,
     deadlineDisplay: record.deadlineDisplay,
@@ -646,8 +614,10 @@ export const getMailDetail = (
   }
 }
 
-export const getInboxItems = (statusMap: StatusMap) =>
-  inboxOrder.map((messageId) => asMailListItem(withStatus(mailRecords[messageId], statusMap)))
+export const getInboxItems = (statusMap: StatusMap, feedbackMap: FeedbackMap = {}) =>
+  inboxOrder.map((messageId) =>
+    asMailListItem(withStatus(mailRecords[messageId], statusMap, feedbackMap)),
+  )
 
 export const getFrequentSenderOptions = (
   clickCounts: Record<string, number>,
